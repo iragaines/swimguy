@@ -1,3 +1,5 @@
+require "camera"
+
 function love.load()
 
 	function love.graphics.newDraw(image, x, y)
@@ -6,16 +8,9 @@ function love.load()
 	-- standard tile size
 	tile_size = 24
 
-	-- camera setup
-	camera = {
-		pixel_location_x = 0,
-		pixel_location_y = 0,
-		tiles_wide = 24,
-		tiles_tall = 16
-	}
-	camera.pixels_wide = camera.tiles_wide * tile_size
-	camera.pixels_tall = camera.tiles_tall * tile_size
-	love.graphics.setMode(camera.pixels_wide, camera.pixels_tall)
+	window_width = 24 * tile_size
+	window_height = 16 * tile_size
+	love.graphics.setMode(window_width, window_height)
 	is_looking = false
 
 
@@ -121,43 +116,43 @@ function love.update(dt)
 	-- toggle display of debug info
 	if love.keyboard.isDown("lshift") and love.keyboard.isDown("e") then
 		show_editor = false
-		love.graphics.setMode(camera.pixels_wide, camera.pixels_tall)
+		love.graphics.setMode(window_width, window_height)
 	elseif love.keyboard.isDown("e") then
 		show_editor = true
-		love.graphics.setMode(camera.pixels_wide+editor_width, camera.pixels_tall)
+		love.graphics.setMode(window_width + editor_width, window_height)
 	end
 
 
 
 	-- look around (keyboard)
 	if love.keyboard.isDown("a") then
-		camera.pixel_location_x = camera.pixel_location_x - 100*dt
+		camera:move(-100*dt, 0)
 		is_looking = true
 	elseif love.keyboard.isDown("d") then
-		camera.pixel_location_x = camera.pixel_location_x + 100*dt
+		camera:move(100*dt, 0)
 		is_looking = true
 	end
 	if love.keyboard.isDown("w") then
-		camera.pixel_location_y = camera.pixel_location_y - 100*dt
+		camera:move(0, -100*dt)
 		is_looking = true
 	elseif love.keyboard.isDown("s") then
-		camera.pixel_location_y = camera.pixel_location_y + 100*dt
+		camera:move(0, 100*dt)
 		is_looking = true
 	end
 
 	-- look around (controller)
 	if love.joystick.getAxis(1, 5) < -0.25 then
-		camera.pixel_location_x = camera.pixel_location_x - 10*dt + 5*love.joystick.getAxis(1, 5)
+		camera:move(-10*dt + 5*love.joystick.getAxis(1, 5), 0)
 		is_looking = true
 	elseif love.joystick.getAxis(1, 5) > 0.25 then
-		camera.pixel_location_x = camera.pixel_location_x + 10*dt + 5*love.joystick.getAxis(1, 5)
+		camera:move(10*dt + 5*love.joystick.getAxis(1, 5), 0)
 		is_looking = true
 	end
 	if love.joystick.getAxis(1, 4) < -0.25 then
-		camera.pixel_location_y = camera.pixel_location_y - 10*dt + 5*love.joystick.getAxis(1, 4)
+		camera:move(0, -10*dt + 5*love.joystick.getAxis(1, 4))
 		is_looking = true
 	elseif love.joystick.getAxis(1, 4) > 0.25 then
-		camera.pixel_location_y = camera.pixel_location_y + 10*dt + 5*love.joystick.getAxis(1, 4)
+		camera:move(0, 10*dt + 5*love.joystick.getAxis(1, 4))
 		is_looking = true
 	end
 
@@ -353,7 +348,7 @@ function love.update(dt)
 
 	-- on leftclick of mouse
 	if love.mouse.isDown("l") then
-		if love.mouse.getX() > camera.pixels_wide then
+		if love.mouse.getX() > window_width then
 			tile_selector_for_editor()
 		else
 			editor_tile_stamp()
@@ -363,18 +358,8 @@ function love.update(dt)
 
 
 	-- keep camera on map
-	if camera.pixel_location_x < 0 then
-		camera.pixel_location_x = 0
-	elseif camera.pixel_location_x + camera.pixels_wide > map.pixels_wide then
-		camera.pixel_location_x = map.pixels_wide - camera.pixels_wide
-	end
-	if camera.pixel_location_y < 0 then
-		camera.pixel_location_y = 0
-	elseif camera.pixel_location_y + camera.pixels_tall > map.pixels_tall then
-		camera.pixel_location_y = map.pixels_tall - camera.pixels_tall
-	end
-	camera.pixel_location_x = math.floor(camera.pixel_location_x)
-	camera.pixel_location_y = math.floor(camera.pixel_location_y)
+	camera:constrain(window_width, window_height, map.pixels_wide, map.pixels_tall)
+
 	-- keep player on map
 	if player.pixel_location_x < 0 then
 		player.pixel_location_x = 0
@@ -395,6 +380,8 @@ end
 
 
 function love.draw()
+	camera:set()
+
 	draw_background_layer()
 
 	draw_midground_layer()
@@ -405,6 +392,8 @@ function love.draw()
 
 	draw_mousebox()
 
+	camera:unset()
+
 	if show_debug then
 		draw_debug()
 
@@ -414,8 +403,6 @@ function love.draw()
 		draw_editor()
 		draw_editor_selectbox()
 	end
-
-
 end
 
 
@@ -436,17 +423,17 @@ function update_player_sprite()
 end
 
 function center_camera()
-	camera.pixel_location_x = player.pixel_location_x - camera.pixels_wide/2
-	camera.pixel_location_y = player.pixel_location_y - camera.pixels_tall/2
+	camera:setPosition(player.pixel_location_x - window_width/2,
+					   player.pixel_location_y - window_height/2)
 end
 
 function mouse_tracker()
-	mouse_x = math.floor((love.mouse.getX()+math.floor(camera.pixel_location_x))/tile_size)
-	mouse_y = math.floor((love.mouse.getY()+math.floor(camera.pixel_location_y))/tile_size)
+	local x, y = camera:mousePosition();
+	mouse_x, mouse_y = math.floor(x / tile_size), math.floor(y / tile_size)
 end
 
 function tile_selector_for_editor()
-	findx = 1+math.floor((love.mouse.getY())/tile_size)*math.floor(editor_width/tile_size)+math.floor((love.mouse.getX()-camera.pixels_wide)/tile_size)
+	findx = 1+math.floor((love.mouse.getY())/tile_size)*math.floor(editor_width/tile_size)+math.floor((love.mouse.getX()-window_width)/tile_size)
 	if findx > 0 and findx < #tileset+1 then
 		current_editor_selection = findx
 	end
@@ -472,40 +459,18 @@ function editor_tile_stamp()
 end
 
 function draw_background_layer()
-	i_start = 1+math.floor(camera.pixel_location_y/tile_size)
-	j_start = 1+math.floor(camera.pixel_location_x/tile_size)
-	i_end = i_start + camera.tiles_tall
-	j_end = j_start + camera.tiles_wide
-	if i_end > map.tiles_tall then
-		i_end = map.tiles_tall
-	end
-	if j_end > map.tiles_wide then
-		j_end = map.tiles_wide
-	end
-
-	for i=i_start, i_end, 1 do
-		for j=j_start, j_end, 1 do
-			love.graphics.newDraw(tileset[map.tiles[i][j]], (j-1)*tile_size-math.floor(camera.pixel_location_x), (i-1)*tile_size-math.floor(camera.pixel_location_y))
+	for i=1, map.tiles_tall, 1 do
+		for j=1, map.tiles_wide, 1 do
+			love.graphics.newDraw(tileset[map.tiles[i][j]], (j-1)*tile_size, (i-1)*tile_size)
 		end
 	end
 end
 
 function draw_midground_layer()
-	i_start = 1+math.floor(camera.pixel_location_y/tile_size)
-	j_start = 1+math.floor(camera.pixel_location_x/tile_size)
-	i_end = i_start + camera.tiles_tall
-	j_end = j_start + camera.tiles_wide
-	if i_end > #map.midground then
-		i_end = #map.midground
-	end
-	if j_end > #map.midground[1] then
-		j_end = #map.midground[1]
-	end
-
-	for i=i_start, i_end, 1 do
-		for j=j_start, j_end, 1 do
+	for i=1, map.tiles_tall, 1 do
+		for j=1, map.tiles_wide, 1 do
 			if map.midground[i][j] ~= 0 then
-				love.graphics.newDraw(tileset[map.midground[i][j]], math.floor((j-1)*tile_size-camera.pixel_location_x), math.floor((i-1)*tile_size-camera.pixel_location_y))
+				love.graphics.newDraw(tileset[map.midground[i][j]], (j-1)*tile_size, (i-1)*tile_size)
 			end
 		end
 	end
@@ -516,34 +481,34 @@ function draw_crates()
 	-- optimize so you only draw crates on screen
 
 	for i=1,#map.crates,1 do
-		love.graphics.newDraw(tileset[8], math.floor(map.crates[i].pixel_location_x)-math.floor(camera.pixel_location_x), math.floor(map.crates[i].pixel_location_y)-math.floor(camera.pixel_location_y))
+		love.graphics.newDraw(tileset[8], map.crates[i].pixel_location_x, map.crates[i].pixel_location_y)
 	end
 end
 
 
 function draw_player()
-	love.graphics.newDraw(player.current_sprite, math.floor(player.pixel_location_x)-math.floor(camera.pixel_location_x), math.floor(player.pixel_location_y)-math.floor(camera.pixel_location_y))
+	love.graphics.newDraw(player.current_sprite, player.pixel_location_x, player.pixel_location_y)
 
 	if player.crouching then
-		love.graphics.newDraw(player_sprites.bounding_box_crouch, math.floor(player.pixel_location_x)-math.floor(camera.pixel_location_x), math.floor(player.pixel_location_y)-math.floor(camera.pixel_location_y))
+		love.graphics.newDraw(player_sprites.bounding_box_crouch, player.pixel_location_x, player.pixel_location_y)
 	else
-		love.graphics.newDraw(player_sprites.bounding_box, math.floor(player.pixel_location_x)-math.floor(camera.pixel_location_x), math.floor(player.pixel_location_y)-math.floor(camera.pixel_location_y))
+		love.graphics.newDraw(player_sprites.bounding_box, player.pixel_location_x, player.pixel_location_y)
 	end
-	love.graphics.newDraw(player_bounding_box_sprites.top_left, (player_left-1)*tile_size-math.floor(camera.pixel_location_x), (player_top-1)*tile_size-math.floor(camera.pixel_location_y))
-	love.graphics.newDraw(player_bounding_box_sprites.top_right, (player_right-1)*tile_size-math.floor(camera.pixel_location_x), (player_top-1)*tile_size-math.floor(camera.pixel_location_y))
-	love.graphics.newDraw(player_bounding_box_sprites.bottom_left, (player_left-1)*tile_size-math.floor(camera.pixel_location_x), (player_bottom-1)*tile_size-math.floor(camera.pixel_location_y))
-	love.graphics.newDraw(player_bounding_box_sprites.bottom_right, (player_right-1)*tile_size-math.floor(camera.pixel_location_x), (player_bottom-1)*tile_size-math.floor(camera.pixel_location_y))
+	love.graphics.newDraw(player_bounding_box_sprites.top_left, (player_left-1)*tile_size, (player_top-1)*tile_size)
+	love.graphics.newDraw(player_bounding_box_sprites.top_right, (player_right-1)*tile_size, (player_top-1)*tile_size)
+	love.graphics.newDraw(player_bounding_box_sprites.bottom_left, (player_left-1)*tile_size, (player_bottom-1)*tile_size)
+	love.graphics.newDraw(player_bounding_box_sprites.bottom_right, (player_right-1)*tile_size, (player_bottom-1)*tile_size)
 end
 
 function draw_mousebox()
-	love.graphics.newDraw(player_bounding_box_sprites.top_left, mouse_x*tile_size-math.floor(camera.pixel_location_x), mouse_y*tile_size-math.floor(camera.pixel_location_y))
-	love.graphics.newDraw(player_bounding_box_sprites.top_right, mouse_x*tile_size-math.floor(camera.pixel_location_x), mouse_y*tile_size-math.floor(camera.pixel_location_y))
-	love.graphics.newDraw(player_bounding_box_sprites.bottom_left, mouse_x*tile_size-math.floor(camera.pixel_location_x), mouse_y*tile_size-math.floor(camera.pixel_location_y))
-	love.graphics.newDraw(player_bounding_box_sprites.bottom_right, mouse_x*tile_size-math.floor(camera.pixel_location_x), mouse_y*tile_size-math.floor(camera.pixel_location_y))
+	love.graphics.newDraw(player_bounding_box_sprites.top_left, mouse_x*tile_size, mouse_y*tile_size)
+	love.graphics.newDraw(player_bounding_box_sprites.top_right, mouse_x*tile_size, mouse_y*tile_size)
+	love.graphics.newDraw(player_bounding_box_sprites.bottom_left, mouse_x*tile_size, mouse_y*tile_size)
+	love.graphics.newDraw(player_bounding_box_sprites.bottom_right, mouse_x*tile_size, mouse_y*tile_size)
 end
 
 function draw_editor_selectbox()
-	if love.mouse.getX() > camera.pixels_wide then
+	if love.mouse.getX() > window_width then
 		love.graphics.newDraw(player_bounding_box_sprites.top_left, love.mouse.getX()-love.mouse.getX()%tile_size, love.mouse.getY()-love.mouse.getY()%tile_size)
 		love.graphics.newDraw(player_bounding_box_sprites.top_right, love.mouse.getX()-love.mouse.getX()%tile_size, love.mouse.getY()-love.mouse.getY()%tile_size)
 		love.graphics.newDraw(player_bounding_box_sprites.bottom_left, love.mouse.getX()-love.mouse.getX()%tile_size, love.mouse.getY()-love.mouse.getY()%tile_size)
@@ -554,13 +519,13 @@ end
 function draw_debug()
 	love.graphics.setColor(0,0,0,255)
 
-	if love.mouse.getX() > camera.pixels_wide then
+	if love.mouse.getX() > window_width then
 		love.graphics.print("selected_tile_ID: " .. current_editor_selection, 10, 10)
 	else
 		love.graphics.print("mouse over tile: (".. 1+mouse_x .. ", " .. 1+mouse_y .. ")", 10, 10)
 	end
 
-	love.graphics.print("midgr x: " .. i_start .. " midgr y: " .. j_start , 10,20)
+	--love.graphics.print("midgr x: " .. i .. " midgr y: " .. j , 10, math.floor(camera.y) +20)
 	love.graphics.print("player x: " .. player.pixel_location_x .. " player y: " .. player.pixel_location_y, 10, 30)
 	love.graphics.print("max move: down " .. max_move_down .. " up " .. max_move_up .. " left " .. max_move_left .. " right " .. max_move_right , 10, 60)
 	love.graphics.print("player bottom " .. player.pixel_location_y+player.pixels_tall .. " " .. player_bottom, 10, 70)
@@ -575,15 +540,15 @@ end
 
 function draw_editor()
 	love.graphics.setColor(100,100,100,255)
-	love.graphics.rectangle("fill", camera.pixels_wide, 0, editor_width, camera.pixels_tall)
+	love.graphics.rectangle("fill", window_width, 0, editor_width, window_height)
 	fix_color_buffer()
-	love.graphics.print("selected tile", camera.pixels_wide+8, 150)
-	love.graphics.newDraw(tileset[current_editor_selection], camera.pixels_wide+tile_size*4, tile_size*6)
+	love.graphics.print("selected tile", window_width+8, 150)
+	love.graphics.newDraw(tileset[current_editor_selection], window_width+tile_size*4, tile_size*6)
 	tiles_per_row = math.floor(editor_width/tile_size)
 	for i=1,#tileset,1 do
 		this_row = math.floor((i-1)/tiles_per_row)
 		this_col = (i-1)%tiles_per_row
-		love.graphics.newDraw(tileset[i], camera.pixels_wide+this_col*tile_size, this_row*tile_size)
+		love.graphics.newDraw(tileset[i], window_width+this_col*tile_size, this_row*tile_size)
 	end
 end
 
